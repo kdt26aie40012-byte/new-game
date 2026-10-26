@@ -497,36 +497,57 @@ const CHARACTERS = [
         notice: '田中の心が大きく揺れている。今なら「自白」ボタンで自白に持ち込めそうだ。',
         effect: { aff: 0, stress: 0 },
         replies: [
-          { text: '……分かった。全部話す。\n外で見張りをしてたのは、茉奈だ。ガキの頃からの友達で、借金で首が回らなくなってた。\n俺が「一度だけだ」って持ちかけたんだ。あいつは車で待ってただけだ。',
-            flags: ['name', 'woman', 'accomplice', 'friend', 'confessed'], slip: true },
+          { text: '……分かったよ。もう隠すのはやめる。\n聞かれたことには、全部答える。', flags: ['confessed'], slip: true },
         ] },
-      // ---- 自白状態で聞ける詳細（自白状態ではこれらと延長だけが出る） ----
-      { id: 'c_why', text: '茉奈さんは、どうして手伝ったんですか？', requires: ['confessed'],
+      /* ---- 自白状態の質問（自白状態ではこれらと延長だけが出る）----
+         自白状態の田中は聞かれたことには全部答えるが、自分からは話さない。
+         核心を突く質問をするたびに事実が明らかになり、次の質問が出てくる。 */
+      { id: 'c_alone', text: '本当は、一人じゃなかったんですね？', requires: ['confessed'],
+        effect: { aff: 0, stress: +3 },
+        replies: [
+          { text: '……ああ。外にもう一人いた。\n俺が中にいる間、見張りをしてたんだ。', flags: ['accomplice'] },
+        ] },
+      { id: 'c_who', text: 'その人は、誰なんですか？', requires: ['confessed'], mentions: ['accomplice'],
+        effect: { aff: 0, stress: +5 },
+        replies: [
+          { text: '……茉奈だ。女だよ。\nあいつの名前だけは、出したくなかった。', flags: ['name', 'woman'] },
+        ] },
+      { id: 'c_relation', text: '茉奈さんとは、どういう関係なんですか？', requires: ['confessed'], mentions: ['name'],
+        effect: { aff: +3, stress: 0 },
+        replies: [
+          { text: 'ガキの頃からの友達だ。幼なじみってやつだよ。\nあいつには、俺しか頼れるやつがいなかった。', flags: ['friend'] },
+        ] },
+      { id: 'c_why', text: '茉奈さんは、どうして手伝ったんですか？', requires: ['confessed'], mentions: ['name'],
         effect: { aff: +3, stress: +3 },
         replies: [
           { text: '借金を返すあてが、もうなかったんだ。\nあいつは最後まで「やめよう」って言ってた。それを押し切ったのは俺だ。' },
         ] },
-      { id: 'c_day', text: '事件の日のことを、最初から話してください。', requires: ['confessed'],
+      { id: 'c_day', text: '事件の日のことを、最初から話してください。', requires: ['confessed'], mentions: ['name'],
         effect: { aff: 0, stress: +3 },
         replies: [
-          { text: '茉奈の車で銀行に行って、俺だけ中に入った。\n貸金庫を開けさせたら、中身はダイヤだった。思ってたよりずっと多かった。', flags: ['diamond'] },
+          { text: '茉奈の車で銀行に行って、俺だけ中に入った。\nあいつは外で車を停めて、ずっと見張ってた。' },
         ] },
-      { id: 'c_loot', text: '盗んだ物は、今どこにあるんですか？', requires: ['confessed'],
+      { id: 'c_what', text: '盗んだのは、何だったんですか？', requires: ['confessed'],
+        effect: { aff: 0, stress: +3 },
+        replies: [
+          { text: 'ダイヤだ。貸金庫の中身だよ。\n思ってたより、ずっと多かった。', flags: ['diamond'] },
+        ] },
+      { id: 'c_loot', text: 'そのダイヤは、今どこにあるんですか？', requires: ['confessed'], mentions: ['diamond'],
         effect: { aff: 0, stress: +5 },
         replies: [
-          { text: '……ダイヤは、茉奈の家の庭に埋めてある。\nほとぼりが冷めたら、あいつの借金に充てるつもりだった。', flags: ['diamond', 'garden'] },
+          { text: '……茉奈の家の庭に埋めてある。\nほとぼりが冷めたら、あいつの借金に充てるつもりだった。', flags: ['garden'] },
         ] },
       { id: 'c_diamond', text: 'ダイヤは、売るつもりだったんですか？', requires: ['confessed'], mentions: ['diamond'],
         effect: { aff: 0, stress: +3 },
         replies: [
-          { text: 'ほとぼりが冷めたら、少しずつな。\n茉奈の借金を返して、残りは……あいつにやるつもりだった。' },
+          { text: 'ほとぼりが冷めたら、少しずつな。\n借金を返して、残りは……あいつにやるつもりだった。' },
         ] },
-      { id: 'c_garden', text: '庭に埋めたのは、茉奈さんの考えですか？', requires: ['confessed'], mentions: ['garden'],
+      { id: 'c_garden', text: '庭に埋めたのは、茉奈さんの考えですか？', requires: ['confessed'], mentions: ['garden', 'name'],
         effect: { aff: 0, stress: +5 },
         replies: [
           { text: '違う、俺が勝手に埋めた。\nあいつは……たぶん、気づいてもいない。' },
         ] },
-      { id: 'c_message', text: '茉奈さんに、伝えたいことはありますか？', requires: ['confessed'],
+      { id: 'c_message', text: '茉奈さんに、伝えたいことはありますか？', requires: ['confessed'], mentions: ['name'],
         effect: { aff: +5, stress: -5 },
         replies: [
           { text: '……巻き込んで悪かった、って。\nそれだけ伝えてくれれば、いい。' },
@@ -751,7 +772,9 @@ const Game = {
     const fresh = topics.filter(t => !t.priority && !t.repeatable && !t.replaces).sort((a, b) => score(a) - score(b));
     const repeat = topics.filter(t => !t.priority && (t.repeatable || t.replaces));
     // 優先 ＋ 新しい話題を最大3つ ＋ つなぎの選択肢（缶コーヒー・沈黙は常に選べる）
-    return [...priority, ...fresh.slice(0, 3), ...repeat];
+    // 自白状態では核心を突く質問をすべて並べる
+    const limit = s.flags.has('confessed') ? fresh.length : 3;
+    return [...priority, ...fresh.slice(0, limit), ...repeat];
   },
 
   /* ---------- 自白ボタン ---------- */
@@ -840,7 +863,7 @@ const Game = {
     }
     // 自白状態へ移行。取り調べは続き、詳細を聞き出せる
     if (!confessedBefore && s.flags.has('confessed')) {
-      await this.addMsg('sys', `${this.char.name}は自白状態になった。質問すれば、隠していたことを話してくれる。`);
+      await this.addMsg('sys', `${this.char.name}は自白状態になった。自分からは話さないが、核心を突く質問には全部答える。`);
     }
     // 自白可能領域に入ったなどの通知
     for (const x of opened) if (x.notice && !s.flags.has('confessed')) await this.addMsg('sys', x.notice);
