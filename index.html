@@ -48,6 +48,10 @@
   .btn.primary:hover { filter: brightness(1.1); color: #1b1b1b; }
   .btn.danger { border-color: var(--danger); color: var(--danger); background: transparent; }
   .btn.danger:hover { background: var(--danger); color: #fff; }
+  .btn.confess-btn { border-color: var(--accent); color: var(--accent); background: transparent; }
+  .btn.confess-btn:hover:not(:disabled) { background: rgba(224,178,90,.15); }
+  .btn.confess-btn.active { background: var(--accent); color: #1b1b1b; font-weight: 700; box-shadow: 0 0 16px rgba(224,178,90,.5); }
+  .btn.confess-btn:disabled { border-color: var(--line); color: #555a72; cursor: not-allowed; }
 
   /* ---------- キャラ選択 ---------- */
   #select { flex-direction: column; align-items: center; gap: 24px; overflow-y: auto; }
@@ -115,6 +119,7 @@
   .choice:hover:not(:disabled) { border-color: var(--accent); background: #2b2a26; }
   .choice:disabled { opacity: .4; cursor: default; }
   .choice::before { content: "▶ "; color: var(--accent); }
+  .choice.confess { border-color: var(--accent); background: rgba(224,178,90,.12); font-weight: 700; }
 
   /* ---------- 回答（バインダー） ---------- */
   #answer { align-items: center; justify-content: center; }
@@ -275,6 +280,7 @@
     <span class="gauge aff">好感度 <span class="bar"><span class="fill" id="affFill"></span></span></span>
     <span class="gauge stress" id="stressGauge">ストレス <span class="bar"><span class="fill" id="stressFill"></span></span></span>
     <span class="spacer"></span>
+    <button class="btn confess-btn" id="confessBtn" onclick="Game.toggleConfess()" disabled title="自白可能領域のときだけ押せます">自白</button>
     <button class="btn danger" onclick="Game.askEnd()">会話を終了する</button>
   </div>
   <div class="stage">
@@ -378,8 +384,7 @@ const CHARACTERS = [
     // 自白・退席の条件
     rules: {
       walkOutStress: 100,       // ストレスがこれ以上で取り調べ打ち切り
-      shakenSum: 80,            // 好感度 ＋ ストレス が一度でもこれ以上になると、自白の可能性が生まれる
-      confessDiff: 30,          // そのうえで 好感度 − ストレス がこれ以上のときだけ自白する
+      shakenSum: 80,            // 好感度 ＋ ストレス が一度でもこれ以上になると、自白可能領域に入る
     },
     // 好感度・ストレスの値だけで自動的に立つフラグ
     autoFlags: [
@@ -486,10 +491,10 @@ const CHARACTERS = [
           { when: s => s.stress >= 60, text: '知らない！ マ……あいつには手を出すな！', slip: true },
           { text: '……知らない。捕まってから、一度も会ってない。' },
         ] },
-      // ---- 自白可能領域に入ると出る「自白させる」選択肢 ----
-      { id: 'confess', text: '……もう、全部話してしまいませんか。（自白させる）',
-        requires: ['shaken'], zone: s => s.aff - s.stress >= s.rules.confessDiff, zoneLabel: '好感度−ストレスが30以上',
-        priority: true, notice: '田中の心が大きく揺れている。今なら自白させられそうだ。',
+      // ---- 自白可能領域で「自白」ボタンを押すと、replaces の選択肢（沈黙）がこれに変わる ----
+      { id: 'confess', text: '……もう、全部話してしまいませんか。（自白させる）', replaces: 'stare',
+        requires: ['shaken'],
+        notice: '田中の心が大きく揺れている。今なら「自白」ボタンで自白に持ち込めそうだ。',
         effect: { aff: 0, stress: 0 },
         replies: [
           { text: '……分かった。全部話す。\n外で見張りをしてたのは、茉奈だ。ガキの頃からの友達で、借金で首が回らなくなってた。\n俺が「一度だけだ」って持ちかけたんだ。あいつは車で待ってただけだ。',
@@ -734,27 +739,58 @@ const Game = {
 
   availableTopics() {
     const s = this.state;
-    let topics = this.char.topics.filter(t => (t.repeatable || !s.used.has(t.id)) && this.flagsMet(t));
+    let topics = this.char.topics.filter(t => !t.replaces && (t.repeatable || !s.used.has(t.id)) && this.flagsMet(t));
+    // 「自白」ボタン選択中は、沈黙の選択肢が「自白させる」に変わる
+    const confess = this.confessTopic();
+    if (s.confessMode && confess) topics = topics.map(t => t.id === confess.replaces ? confess : t);
     // 自白状態では、自白後の質問（confessed が条件のもの）だけを出す
     if (s.flags.has('confessed')) topics = topics.filter(t => (t.requires || []).includes('confessed'));
     // 新しく解放された話題を優先し、提示済みで選ばれなかった話題は後回しにしてローテーションさせる
     const score = t => (s.recent.includes(t.id) ? -2 : 0) + (s.shown[t.id] || 0);
-    const priority = topics.filter(t => t.priority);   // 「自白させる」「延長」は常に表示
-    const fresh = topics.filter(t => !t.priority && !t.repeatable).sort((a, b) => score(a) - score(b));
-    const repeat = topics.filter(t => !t.priority && t.repeatable);
+    const priority = topics.filter(t => t.priority);   // 「延長」は常に表示
+    const fresh = topics.filter(t => !t.priority && !t.repeatable && !t.replaces).sort((a, b) => score(a) - score(b));
+    const repeat = topics.filter(t => !t.priority && (t.repeatable || t.replaces));
     // 優先 ＋ 新しい話題を最大3つ ＋ つなぎの選択肢（缶コーヒー・沈黙は常に選べる）
     return [...priority, ...fresh.slice(0, 3), ...repeat];
   },
 
-  renderChoices() {
+  /* ---------- 自白ボタン ---------- */
+  confessTopic() {
+    return this.char.topics.find(t => t.replaces);
+  },
+
+  // 自白可能領域にいて、入力待ちのときだけ押せる。領域を外れたら選択も解除
+  updateConfessBtn() {
+    const s = this.state;
+    const btn = document.getElementById('confessBtn');
+    const c = this.confessTopic();
+    const ok = !!c && !s.ended && !s.busy && !s.flags.has('confessed') && this.flagsMet(c);
+    if (!ok && !s.busy) s.confessMode = false;
+    btn.disabled = !ok;
+    btn.classList.toggle('active', !!s.confessMode);
+    btn.textContent = s.confessMode ? '自白：選択中' : '自白';
+  },
+
+  toggleConfess() {
+    const s = this.state;
+    s.confessMode = !s.confessMode;
+    // 並びはそのままで、沈黙 ⇔ 自白させる だけを入れ替える
+    const c = this.confessTopic();
+    const base = this.char.topics.find(t => t.id === c.replaces);
+    this.renderChoices(this.lastChoices.map(t => t === base || t === c ? (s.confessMode ? c : base) : t));
+  },
+
+  renderChoices(list = null) {
     const box = document.getElementById('choices');
     box.innerHTML = '';
+    this.updateConfessBtn();
     if (this.state.ended) return;
-    this.availableTopics().forEach(t => {
-      this.state.shown[t.id] = (this.state.shown[t.id] || 0) + 1;
+    this.lastChoices = list || this.availableTopics();
+    this.lastChoices.forEach(t => {
+      if (!list) this.state.shown[t.id] = (this.state.shown[t.id] || 0) + 1;
       Save.add(this.char.id, 'seen', t.id);
       const b = document.createElement('button');
-      b.className = 'choice';
+      b.className = 'choice' + (t.replaces ? ' confess' : '');
       b.textContent = t.text;
       b.onclick = () => this.choose(t);
       box.appendChild(b);
@@ -764,6 +800,9 @@ const Game = {
   async choose(t) {
     const s = this.state;
     document.querySelectorAll('.choice').forEach(b => b.disabled = true);
+    s.busy = true;
+    s.confessMode = false;
+    this.updateConfessBtn();
     s.used.add(t.id);
     s.recent = s.recent.filter(id => id !== t.id);
     Save.add(this.char.id, 'asked', t.id);
@@ -805,6 +844,7 @@ const Game = {
     }
     // 自白可能領域に入ったなどの通知
     for (const x of opened) if (x.notice && !s.flags.has('confessed')) await this.addMsg('sys', x.notice);
+    s.busy = false;
     if (s.turn >= s.maxTurns) {
       this.addMsg('sys', '取り調べの時間が終わった。');
       return this.endTalk('timeup');
@@ -820,6 +860,7 @@ const Game = {
     if (s.ended) return;
     s.ended = true;
     s.endReason = reason;
+    this.updateConfessBtn();
     document.getElementById('choices').innerHTML = '';
     const b = document.createElement('button');
     b.className = 'btn primary';
@@ -947,7 +988,7 @@ const Game = {
     const q = t => `「${t.text}」`;
     let html = `<div class="progress">取得したフラグ ${got} / ${Object.keys(c.flagDefs).length}</div></div></div>`;
     html += `<div class="flag-tools">
-        <span>初期値：好感度 ${c.initial.aff} / ストレス ${c.initial.stress}　・　自白条件：好感度＋ストレスが一度 ${c.rules.shakenSum} 以上 → 好感度 − ストレス ≧ ${c.rules.confessDiff}　・　退席：ストレス ${c.rules.walkOutStress}</span>
+        <span>初期値：好感度 ${c.initial.aff} / ストレス ${c.initial.stress}　・　自白可能領域：好感度＋ストレスが一度でも ${c.rules.shakenSum} 以上　・　退席：ストレス ${c.rules.walkOutStress}</span>
         <label><input type="checkbox" ${showAll ? 'checked' : ''} onchange="Game.flagShowAll=this.checked; Game.openSettings('flags')"> 未取得も表示（ネタバレ）</label>
       </div>`;
     html += '<div class="flow"><div class="flow-h">立つきっかけ（質問 ／ 条件）</div><div></div><div class="flow-h">フラグ</div><div></div><div class="flow-h">選べるようになる質問</div>';
