@@ -190,6 +190,8 @@
   .badges { display: flex; flex-wrap: wrap; gap: 8px; }
   .badge { padding: 6px 14px; border-radius: 999px; font-size: 14px; border: 1px dashed var(--line); color: #555a72; background: #191b26; }
   .badge.on { border-style: solid; border-color: var(--ok); color: #eafbe9; background: rgba(124,207,138,.18); box-shadow: 0 0 14px rgba(124,207,138,.35); }
+  .badge.secret { border-color: #6b4fa0; color: #6f6390; }
+  .badge.on.secret { border-color: #b48cff; color: #f1e8ff; background: rgba(180,140,255,.18); box-shadow: 0 0 18px rgba(180,140,255,.5); }
   .badge.on.unique { border-color: var(--accent); background: rgba(224,178,90,.2); color: #fff3d6; box-shadow: 0 0 18px rgba(224,178,90,.5); }
   .qlist { margin: 8px 0 0; padding-left: 26px; display: flex; flex-direction: column; gap: 6px; }
   .qlist li { line-height: 1.6; }
@@ -367,6 +369,14 @@ const CHARACTERS = [
       e2: 'END 2：核心への到達',
       e3: 'END 3：届かなかった名前',
       e4: 'END 4：迷宮入り',
+      e5: '隠しEND：警察未満人間満点',
+    },
+    hiddenEndings: ['e5'],   // 実績で、取得するまで存在も伏せるエンディング
+    // 隠しエンディングの判定：回答に「単独犯だった」と書くと到達（否定形は除く）
+    hiddenAnswer: {
+      ending: 'e5',
+      variants: ['単独', 'たんどく', '一人でやった', 'ひとりでやった', '独りでやった', '一人の犯行', '一人で犯行', 'solo', 'alone'],
+      negations: ['単独犯ではな', '単独犯じゃな', '単独ではな', '単独じゃな', 'たんどくはんではな', 'たんどくはんじゃな', '一人でやったのではな', '一人でやったわけではな', '一人でやったわけじゃな'],
     },
     initial: { aff: 30, stress: 30 },
     intro: '……また取り調べか。何度聞かれても同じだ。\n駅前の銀行は、俺一人でやった。',
@@ -924,7 +934,12 @@ const Game = {
     addFact(sec.unique.label, clear, true);
     sec.extras.forEach((e, i) => addFact(e.label, hits[i], false));
 
-    const [endId, body] = this.ending(clear, n, sec.extras.length);
+    // 隠しエンディング：茉奈の名前を挙げず「単独犯だった」と書いた場合
+    const ha = this.char.hiddenAnswer;
+    const hidden = !!ha && !clear && containsWord(text, ha.variants) && !containsWord(text, ha.negations);
+    if (hidden) { v.textContent = 'HIDDEN'; v.className = 'big clear'; }
+
+    const [endId, body] = this.ending(clear, n, sec.extras.length, hidden);
     const title = this.char.endings[endId];
 
     // 実績に登録
@@ -938,7 +953,9 @@ const Game = {
     this.show('result');
   },
 
-  ending(clear, n, total) {
+  ending(clear, n, total, hidden) {
+    if (hidden)
+      return ['e5', 'あなたは「一人でやった」という田中の言葉を、最後まで信じた。\n刑事としては失格かもしれない。\nだが、人を信じたあなたの心は――満点だった。'];
     const how = this.state.flags.has('confessed')
       ? '取調室で、田中はついに共犯者の名を口にした。'
       : {
@@ -983,7 +1000,8 @@ const Game = {
         }).join('') + '</div>';
         html += '<div class="set-label">エンディング</div><div class="badges">' + ends.map(([id, name]) => {
           const on = sv.endings.includes(id);
-          return `<span class="badge ${on ? 'on' : ''}">${on ? name : '？？？'}</span>`;
+          const secret = (c.hiddenEndings || []).includes(id);
+          return `<span class="badge ${on ? 'on' : ''} ${secret ? 'secret' : ''}">${on ? name : secret ? '？？？（隠し実績）' : '？？？'}</span>`;
         }).join('') + '</div>';
       } else if (tab === 'flags') {
         html += this.flagChart(c, sv);
