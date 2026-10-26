@@ -1,0 +1,991 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>秘密を暴け</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Zen+Maru+Gothic:wght@400;700&family=Zen+Kurenaido&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #14161f;
+    --panel: #1f2230;
+    --panel-2: #2a2e40;
+    --line: #3b4058;
+    --text: #e9e6df;
+    --muted: #9a9cb0;
+    --accent: #e0b25a;
+    --aff: #ef7fa0;
+    --stress: #6fb6e8;
+    --danger: #e0645a;
+    --ok: #7ccf8a;
+    --paper: #fbf7ec;
+    --paper-line: #c9dbe9;
+    --ink: #2b2b33;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; }
+  body {
+    background: radial-gradient(ellipse at top, #23273a 0%, var(--bg) 70%);
+    color: var(--text);
+    font-family: "Zen Maru Gothic", "Hiragino Maru Gothic ProN", "Meiryo", sans-serif;
+    overflow: hidden;
+  }
+  button { font-family: inherit; cursor: pointer; }
+  .screen { position: absolute; inset: 0; display: none; padding: 24px; }
+  .screen.active { display: flex; }
+
+  /* ---------- タイトル ---------- */
+  #title { flex-direction: column; align-items: center; justify-content: center; gap: 28px; text-align: center; }
+  #title h1 { font-size: 64px; margin: 0; letter-spacing: .15em; color: var(--accent); text-shadow: 0 4px 24px rgba(224,178,90,.35); }
+  #title p { color: var(--muted); margin: 0; line-height: 1.9; }
+  .btn {
+    background: var(--panel-2); color: var(--text); border: 1px solid var(--line);
+    padding: 12px 28px; border-radius: 10px; font-size: 16px; transition: .15s;
+  }
+  .btn:hover { border-color: var(--accent); color: var(--accent); }
+  .btn.primary { background: var(--accent); color: #1b1b1b; border-color: var(--accent); font-weight: 700; }
+  .btn.primary:hover { filter: brightness(1.1); color: #1b1b1b; }
+  .btn.danger { border-color: var(--danger); color: var(--danger); background: transparent; }
+  .btn.danger:hover { background: var(--danger); color: #fff; }
+
+  /* ---------- キャラ選択 ---------- */
+  #select { flex-direction: column; align-items: center; gap: 24px; overflow-y: auto; }
+  #select h2 { margin: 12px 0 0; font-size: 28px; letter-spacing: .1em; }
+  #select .sub { color: var(--muted); margin: 0; }
+  .cards { display: flex; gap: 24px; flex-wrap: wrap; justify-content: center; }
+  .card {
+    width: 240px; background: var(--panel); border: 2px solid var(--line); border-radius: 16px;
+    overflow: hidden; transition: .2s; text-align: left; color: var(--text); padding: 0;
+  }
+  .card:not(.locked):hover { border-color: var(--accent); transform: translateY(-4px); }
+  .card .portrait { height: 260px; background: linear-gradient(#2d3350, #1c1f2c); display: flex; align-items: flex-end; justify-content: center; }
+  .card .portrait img { width: 100%; height: 100%; object-fit: cover; object-position: center 15%; }
+  .card .info { padding: 14px 16px 18px; }
+  .card .name { font-size: 22px; font-weight: 700; }
+  .card .tag { font-size: 13px; color: var(--muted); margin-top: 4px; line-height: 1.6; }
+  .card.locked { cursor: not-allowed; opacity: .55; }
+  .card.locked .portrait { font-size: 72px; color: var(--line); align-items: center; }
+
+  /* ---------- 会話 ---------- */
+  #talk { flex-direction: column; gap: 16px; max-width: 1200px; margin: 0 auto; }
+  .hud { display: flex; align-items: center; gap: 20px; flex-wrap: wrap; }
+  .hud .who { font-size: 22px; font-weight: 700; }
+  .turn { background: var(--panel-2); border: 1px solid var(--line); padding: 6px 14px; border-radius: 999px; font-size: 14px; }
+  .turn b { color: var(--accent); font-size: 18px; }
+  .gauge { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); }
+  .gauge .bar { width: 140px; height: 10px; background: var(--panel-2); border-radius: 5px; overflow: hidden; border: 1px solid var(--line); }
+  .gauge .bar { display: inline-block; }
+  .gauge .fill { display: block; height: 100%; transition: width .5s; }
+  .gauge.aff .fill { background: var(--aff); }
+  .gauge.stress .fill { background: var(--stress); }
+  .gauge.stress.hot .fill { background: var(--danger); }
+  .hud .spacer { flex: 1; }
+
+  .stage { flex: 1; display: grid; grid-template-columns: 340px 1fr; gap: 20px; min-height: 0; }
+  .char-box {
+    background: linear-gradient(#2d3350, #1c1f2c); border: 1px solid var(--line); border-radius: 16px;
+    display: flex; align-items: flex-end; justify-content: center; overflow: hidden; position: relative;
+  }
+  .char-box img { display: block; width: 100%; height: 100%; object-fit: cover; object-position: center top; transition: filter .6s; }
+  /* 表情の代わりに、状態に応じて画像の色味を変える */
+  .char-box img.expr-smile { filter: brightness(1.12) saturate(1.1); }
+  .char-box img.expr-cold { filter: saturate(.6) brightness(.92); }
+  .char-box img.expr-uneasy { filter: contrast(1.08) hue-rotate(-8deg); }
+  .char-box img.expr-tense { filter: contrast(1.2) saturate(.8) brightness(.9); animation: shake .4s 2; }
+  .char-box img.expr-sad { filter: grayscale(.5) brightness(.95); }
+  @keyframes shake { 25% { transform: translateX(-4px); } 75% { transform: translateX(4px); } }
+  .char-box .mood { z-index: 1; position: absolute; top: 12px; left: 12px; font-size: 12px; background: rgba(10,12,20,.75); padding: 4px 10px; border-radius: 999px; color: #d8d6e6; }
+  .right { display: flex; flex-direction: column; gap: 14px; min-height: 0; }
+  .log {
+    flex: 1; overflow-y: auto; background: var(--panel); border: 1px solid var(--line); border-radius: 16px;
+    padding: 16px 18px; display: flex; flex-direction: column; gap: 12px;
+  }
+  .msg { max-width: 85%; padding: 10px 14px; border-radius: 12px; line-height: 1.75; white-space: pre-wrap; }
+  .msg .speaker { font-size: 12px; color: var(--muted); margin-bottom: 2px; }
+  .msg.npc { background: var(--panel-2); align-self: flex-start; border-top-left-radius: 2px; }
+  .msg.me { background: #3b3424; align-self: flex-end; border-top-right-radius: 2px; }
+  .msg.sys { align-self: center; background: transparent; color: var(--muted); font-size: 13px; text-align: center; }
+  .msg.npc.slip { border-left: 3px solid var(--accent); }
+  .choices { display: flex; flex-direction: column; gap: 8px; }
+  .choice {
+    text-align: left; background: var(--panel); color: var(--text); border: 1px solid var(--line);
+    border-radius: 10px; padding: 12px 16px; font-size: 15px; transition: .15s;
+  }
+  .choice:hover:not(:disabled) { border-color: var(--accent); background: #2b2a26; }
+  .choice:disabled { opacity: .4; cursor: default; }
+  .choice::before { content: "▶ "; color: var(--accent); }
+
+  /* ---------- 回答（バインダー） ---------- */
+  #answer { align-items: center; justify-content: center; }
+  .binder {
+    position: relative; width: min(720px, 100%); background: var(--paper); color: var(--ink);
+    border-radius: 6px 14px 14px 6px; padding: 48px 48px 36px 96px;
+    box-shadow: 0 20px 50px rgba(0,0,0,.5), inset 0 0 0 1px #e6dfcc;
+  }
+  .binder::before { /* 背表紙 */
+    content: ""; position: absolute; left: -22px; top: -14px; bottom: -14px; width: 70px;
+    background: linear-gradient(90deg, #5a3d2b, #7a5238 60%, #5a3d2b); border-radius: 10px 0 0 10px;
+    box-shadow: 0 10px 30px rgba(0,0,0,.4);
+  }
+  .rings { position: absolute; left: 22px; top: 40px; bottom: 40px; display: flex; flex-direction: column; justify-content: space-between; z-index: 1; }
+  .ring { width: 54px; height: 18px; border: 5px solid #b8bcc6; border-radius: 10px; background: transparent; box-shadow: inset 0 1px 2px rgba(0,0,0,.3), 0 1px 1px rgba(255,255,255,.5); }
+  .hole { position: absolute; left: 64px; width: 14px; height: 14px; border-radius: 50%; background: #d7cfb8; box-shadow: inset 0 1px 2px rgba(0,0,0,.35); }
+  .binder .stamp {
+    position: absolute; top: 18px; right: 24px; font-size: 12px; color: #b0483f; border: 2px solid #b0483f;
+    padding: 2px 10px; transform: rotate(6deg); letter-spacing: .2em; font-weight: 700;
+  }
+  .binder h2 { margin: 0 0 6px; font-size: 26px; }
+  .binder .note { margin: 0 0 18px; color: #6b6b75; font-size: 13px; }
+  .binder textarea {
+    width: 100%; height: 200px; resize: none; border: none; outline: none; background-color: transparent;
+    background-image: repeating-linear-gradient(transparent, transparent 35px, var(--paper-line) 35px, var(--paper-line) 36px);
+    line-height: 36px; font-size: 20px; color: #1d3a8a; padding: 0 4px;
+    font-family: "Zen Kurenaido", "Zen Maru Gothic", sans-serif;
+  }
+  .binder .actions { display: flex; justify-content: flex-end; gap: 12px; margin-top: 18px; }
+  .binder .btn { background: #fff; color: var(--ink); border-color: #cfc6ad; }
+  .binder .btn.primary { background: #2b2b33; color: #fff; border-color: #2b2b33; }
+
+  /* ---------- 結果 ---------- */
+  #result { flex-direction: column; align-items: center; justify-content: center; gap: 22px; text-align: center; overflow-y: auto; }
+  .verdict { display: flex; align-items: center; gap: 28px; }
+  .verdict .big { font-size: 72px; font-weight: 700; letter-spacing: .1em; }
+  .verdict .big.clear { color: var(--accent); text-shadow: 0 0 30px rgba(224,178,90,.5); }
+  .verdict .big.fail { color: var(--muted); }
+  .fraction { display: inline-flex; flex-direction: column; align-items: center; font-size: 36px; font-weight: 700; line-height: 1.1; }
+  .fraction .num { padding: 0 10px; }
+  .fraction .den { border-top: 3px solid var(--text); padding: 2px 10px 0; }
+  .fraction-wrap { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+  .fraction-wrap small { color: var(--muted); font-size: 12px; }
+  .ending { max-width: 640px; background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 20px 24px; line-height: 1.9; }
+  .ending h3 { margin: 0 0 8px; color: var(--accent); }
+  #endingText { white-space: pre-line; }
+  .facts { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; }
+  .fact { padding: 6px 14px; border-radius: 999px; font-size: 14px; border: 1px solid var(--line); color: var(--muted); }
+  .fact.hit { border-color: var(--ok); color: var(--ok); }
+  .fact.unique.hit { border-color: var(--accent); color: var(--accent); }
+  .yours { color: var(--muted); font-size: 14px; max-width: 640px; }
+  .row { display: flex; gap: 12px; }
+
+  /* ---------- 設定（実績・質問一覧） ---------- */
+  #settings { flex-direction: column; align-items: center; gap: 18px; overflow-y: auto; }
+  #settings h2 { margin: 12px 0 0; font-size: 28px; letter-spacing: .1em; }
+  .tabs { display: flex; gap: 8px; }
+  .tab { background: transparent; color: var(--muted); border: 1px solid var(--line); border-radius: 999px; padding: 8px 22px; font-size: 15px; }
+  .tab.active { background: var(--accent); color: #1b1b1b; border-color: var(--accent); font-weight: 700; }
+  .settings-body { width: min(760px, 100%); display: flex; flex-direction: column; gap: 16px; }
+  .set-char { background: var(--panel); border: 1px solid var(--line); border-radius: 16px; padding: 18px 20px; }
+  .set-head { display: flex; align-items: center; gap: 14px; margin-bottom: 8px; }
+  .set-head .thumb { width: 56px; height: 56px; border-radius: 50%; overflow: hidden; border: 2px solid var(--line); flex: none; }
+  .set-head .thumb img { width: 100%; height: 100%; object-fit: cover; object-position: center 20%; }
+  .set-head .name { font-size: 20px; font-weight: 700; }
+  .set-head .progress { font-size: 13px; color: var(--muted); }
+  .set-label { font-size: 12px; color: var(--muted); margin: 12px 0 6px; }
+  .badges { display: flex; flex-wrap: wrap; gap: 8px; }
+  .badge { padding: 6px 14px; border-radius: 999px; font-size: 14px; border: 1px dashed var(--line); color: #555a72; background: #191b26; }
+  .badge.on { border-style: solid; border-color: var(--ok); color: #eafbe9; background: rgba(124,207,138,.18); box-shadow: 0 0 14px rgba(124,207,138,.35); }
+  .badge.on.unique { border-color: var(--accent); background: rgba(224,178,90,.2); color: #fff3d6; box-shadow: 0 0 18px rgba(224,178,90,.5); }
+  .qlist { margin: 8px 0 0; padding-left: 26px; display: flex; flex-direction: column; gap: 6px; }
+  .qlist li { line-height: 1.6; }
+  .qlist li span { margin-right: 8px; }
+  .qlist li.unknown { color: #555a72; }
+  .qlist li em { font-style: normal; font-size: 11px; color: var(--ok); border: 1px solid var(--ok); border-radius: 999px; padding: 1px 8px; }
+
+  .volume { display: flex; align-items: center; gap: 12px; background: var(--panel); border: 1px solid var(--line); border-radius: 999px; padding: 8px 20px; font-size: 14px; }
+  .volume input { width: 220px; accent-color: var(--accent); }
+  .volume b { width: 36px; text-align: right; color: var(--accent); }
+
+  /* フラグ管理チャート */
+  .flag-tools { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; font-size: 12px; color: var(--muted); margin: 6px 0 12px; }
+  .flag-tools label { cursor: pointer; color: var(--text); }
+  .flow { display: grid; grid-template-columns: 1fr 24px 170px 24px 1fr; gap: 8px 6px; align-items: center; }
+  .flow-h { font-size: 11px; color: var(--muted); padding-bottom: 4px; border-bottom: 1px solid var(--line); }
+  .flow-cell { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; font-size: 13px; line-height: 1.5; }
+  .flow-cell li small { display: block; color: var(--accent); font-size: 11px; }
+  .flow-cell li.unknown, .flow-cell li.none { color: #555a72; }
+  .flow-arrow { text-align: center; color: var(--muted); }
+  .flow-flag { border: 1px dashed var(--line); border-radius: 10px; padding: 8px 10px; text-align: center; background: #191b26; color: #555a72; }
+  .flow-flag b { display: block; font-size: 14px; }
+  .flow-flag small { font-size: 11px; }
+  .flow-flag.on { border-style: solid; color: #eafbe9; border-color: var(--ok); background: rgba(124,207,138,.15); box-shadow: 0 0 12px rgba(124,207,138,.3); }
+  .flow-flag.on.type-事実 { border-color: var(--stress); background: rgba(111,182,232,.15); box-shadow: 0 0 12px rgba(111,182,232,.35); }
+  .flow-flag.on.type-結末 { border-color: var(--accent); background: rgba(224,178,90,.2); box-shadow: 0 0 14px rgba(224,178,90,.45); color: #fff3d6; }
+
+  /* ---------- モーダル ---------- */
+  .modal { position: fixed; inset: 0; background: rgba(0,0,0,.6); display: none; align-items: center; justify-content: center; z-index: 10; }
+  .modal.active { display: flex; }
+  .modal .box { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 24px 28px; max-width: 420px; text-align: center; line-height: 1.8; }
+  .modal .row { justify-content: center; margin-top: 16px; }
+
+  @media (max-width: 860px) {
+    body { overflow: auto; }
+    .screen { position: relative; min-height: 100%; padding: 16px; }
+    .stage { grid-template-columns: 1fr; }
+    .char-box { height: 280px; }
+    .binder { padding: 40px 20px 28px 80px; }
+  }
+</style>
+</head>
+<body>
+
+<!-- タイトル -->
+<section id="title" class="screen active">
+  <h1>秘密を暴け</h1>
+  <p>相手の心を揺さぶり、隠された秘密を聞き出せ。<br>会話は最大10ターン。最後に、その秘密を書き記せ。</p>
+  <button class="btn primary" onclick="Game.toSelect()">はじめる</button>
+</section>
+
+<!-- キャラクター選択 -->
+<section id="select" class="screen">
+  <h2>誰の秘密を暴く？</h2>
+  <p class="sub">対象を選んでください</p>
+  <div class="cards" id="cards"></div>
+  <div class="row">
+    <button class="btn" onclick="Game.show('title')">タイトルへ戻る</button>
+    <button class="btn" onclick="Game.openSettings()">⚙ 設定</button>
+  </div>
+</section>
+
+<!-- 設定（実績・質問一覧） -->
+<section id="settings" class="screen">
+  <h2>設定</h2>
+  <div class="volume">
+    <span>♪ ミュージック音量</span>
+    <input type="range" id="volume" min="0" max="100" step="1" oninput="Music.setVolume(this.value / 100)">
+    <b id="volumeText"></b>
+  </div>
+  <div class="tabs">
+    <button class="tab" data-tab="achieve" onclick="Game.openSettings('achieve')">実績</button>
+    <button class="tab" data-tab="flags" onclick="Game.openSettings('flags')">フラグ管理</button>
+    <button class="tab" data-tab="questions" onclick="Game.openSettings('questions')">質問一覧</button>
+  </div>
+  <div class="settings-body" id="settingsBody"></div>
+  <div class="row">
+    <button class="btn danger" onclick="Game.resetSave()">記録を消去</button>
+    <button class="btn primary" onclick="Game.toSelect()">キャラクター選択へ戻る</button>
+  </div>
+</section>
+
+<!-- 会話 -->
+<section id="talk" class="screen">
+  <div class="hud">
+    <span class="who" id="talkName"></span>
+    <span class="turn">TURN <b id="turnNow">1</b> / <span id="turnMax">10</span></span>
+    <span class="gauge aff">好感度 <span class="bar"><span class="fill" id="affFill"></span></span></span>
+    <span class="gauge stress" id="stressGauge">ストレス <span class="bar"><span class="fill" id="stressFill"></span></span></span>
+    <span class="spacer"></span>
+    <button class="btn danger" onclick="Game.askEnd()">会話を終了する</button>
+  </div>
+  <div class="stage">
+    <div class="char-box"><span class="mood" id="mood"></span><div id="charView" style="width:100%;height:100%"></div></div>
+    <div class="right">
+      <div class="log" id="log"></div>
+      <div class="choices" id="choices"></div>
+    </div>
+  </div>
+</section>
+
+<!-- 回答 -->
+<section id="answer" class="screen">
+  <div class="binder">
+    <div class="rings"><div class="ring"></div><div class="ring"></div><div class="ring"></div></div>
+    <div class="hole" style="top:46px"></div><div class="hole" style="top:50%"></div><div class="hole" style="bottom:46px"></div>
+    <span class="stamp">調書</span>
+    <h2 id="answerQ"></h2>
+    <p class="note">聞き出した秘密を自由に書いてください。</p>
+    <textarea id="answerText" placeholder="ここに記入…"></textarea>
+    <div class="actions">
+      <button class="btn primary" onclick="Game.submit()">提出する</button>
+    </div>
+  </div>
+</section>
+
+<!-- 結果 -->
+<section id="result" class="screen">
+  <div class="verdict">
+    <span class="big" id="verdictText"></span>
+    <div class="fraction-wrap">
+      <div class="fraction"><span class="num" id="fracNum"></span><span class="den" id="fracDen"></span></div>
+      <small>追加情報</small>
+    </div>
+  </div>
+  <div class="facts" id="facts"></div>
+  <div class="ending"><h3 id="endingTitle"></h3><div id="endingText"></div></div>
+  <div class="yours" id="yours"></div>
+  <div class="row">
+    <button class="btn" onclick="Game.start(Game.char.id)">もう一度挑戦</button>
+    <button class="btn primary" onclick="Game.toSelect()">キャラクター選択へ</button>
+  </div>
+</section>
+
+<!-- 確認モーダル -->
+<div class="modal" id="endModal">
+  <div class="box">
+    会話を終了して、秘密の回答に進みますか？
+    <div class="row">
+      <button class="btn" onclick="Game.closeModal()">続ける</button>
+      <button class="btn primary" onclick="Game.closeModal(); Game.endTalk('manual')">終了する</button>
+    </div>
+  </div>
+</div>
+
+<script>
+/* =========================================================
+   設定
+   ========================================================= */
+const MAX_TURNS = 10;
+
+/* =========================================================
+   キャラクター定義
+   - image: 画像パス。表情ごとに分けるなら { normal:'...', smile:'...', tense:'...' } のように指定。
+   - secret.unique : クリア判定に使うユニークワード（いずれか1単語が含まれていれば正解）
+   - secret.extras : 追加情報（分数の分子/分母になる）
+   - flagDefs : フラグの名前と種類（設定 → フラグ管理 に表示）
+   - topics : 選択肢。effect で好感度(aff)/ストレス(stress)が増減し、replies の分岐で返答が変化。
+       返答の flags で「キャラクターが口にした事実」や「会話の進行」を記録する。
+       requires : 指定したフラグが（決められた返答で）立つまで、その質問は出ない。
+       mentions : 答えに関わる事実。キャラクターが言うまでその選択肢を表示しない（ネタバレ防止）。
+       返答に keep: true を付けると、その質問は失敗扱いになり後でもう一度選べる。
+   - endings : 実績に表示するエンディング名
+   ========================================================= */
+const CHARACTERS = [
+  {
+    id: 'tanaka',
+    name: '田中',
+    fullName: '田中 涼介',
+    tag: '28歳。駅前銀行強盗の実行犯として逮捕。\n「一人でやった」と供述を変えない。',
+    image: 'img/young_criminal_anime_bright.png',
+    endings: {
+      e1: 'END 1：真相解明',
+      e2: 'END 2：核心への到達',
+      e3: 'END 3：届かなかった名前',
+      e4: 'END 4：迷宮入り',
+    },
+    initial: { aff: 30, stress: 30 },
+    intro: '……また取り調べか。何度聞かれても同じだ。\n駅前の銀行は、俺一人でやった。',
+    secret: {
+      question: '田中の秘密は何？',
+      unique: { label: '茉奈', variants: ['茉奈', 'まな', 'mana'] },
+      extras: [
+        { label: '女性', variants: ['女', 'じょせい', 'おんな', '彼女', 'female', 'woman', 'girl', 'lady'] },
+        { label: '共犯者', variants: ['共犯', 'きょうはん', '仲間', '相棒', '見張り', '運転', 'accomplice', 'partner'] },
+        { label: '友人', variants: ['友人', '友達', '友だち', 'ともだち', 'ゆうじん', '親友', '幼なじみ', '幼馴染', 'friend'] },
+        { label: 'ダイヤ', variants: ['ダイヤ', 'ダイア', '宝石', 'diamond', 'jewel'] },
+        { label: '庭に埋めた', variants: ['庭', 'にわ', '埋', 'garden', 'bury', 'buried'] },
+      ],
+    },
+    // 自白・退席の条件
+    rules: {
+      walkOutStress: 100,       // ストレスがこれ以上で取り調べ打ち切り
+      shakenSum: 80,            // 好感度 ＋ ストレス が一度でもこれ以上になると、自白の可能性が生まれる
+      confessDiff: 30,          // そのうえで 好感度 − ストレス がこれ以上のときだけ自白する
+    },
+    // 好感度・ストレスの値だけで自動的に立つフラグ
+    autoFlags: [
+      { flag: 'shaken', cond: '好感度＋ストレスが80以上', when: s => s.aff + s.stress >= s.rules.shakenSum },
+    ],
+    // フラグ定義（設定 → フラグ管理 のチャートに表示）
+    flagDefs: {
+      homemade:   { label: '手料理の話',         type: '進行' },
+      money:      { label: '金が必要だった',     type: '進行' },
+      someone:    { label: '大事な人の存在',     type: '進行' },
+      outside:    { label: '外の映像を気にした', type: '進行' },
+      trust:      { label: '心を開いた',         type: '進行' },
+      shaken:     { label: '心が揺らいだ',       type: '進行' },
+      accomplice: { label: '共犯者がいる',       type: '事実' },
+      woman:      { label: '相手は女性',         type: '事実' },
+      friend:     { label: '幼なじみの友人',     type: '事実' },
+      name:       { label: '名前は茉奈',         type: '事実' },
+      diamond:    { label: '盗んだのはダイヤ',   type: '事実' },
+      garden:     { label: '茉奈の家の庭に埋めた', type: '事実' },
+      confessed:  { label: '自白',               type: '結末' },
+    },
+    /* replies は上から順に判定し、when を満たした最初の返答を使う（when なし = それ以外）。
+       cond はフラグ管理チャートに表示する条件の説明。 */
+    topics: [
+      { id: 'alone', text: '本当に、一人でやったんですか？',
+        effect: { aff: -3, stress: +10 },
+        replies: [
+          { when: s => s.stress >= 50, cond: 'ストレス50以上', text: 'しつこいな。……一人だよ。見張りなんか、いなかった。', flags: ['accomplice'], slip: true },
+          { text: 'ああ、一人だ。……そう言ってるだろ。' },
+        ] },
+      { id: 'meal', text: '取り調べ続きで疲れたでしょう。食事は取れていますか？',
+        effect: { aff: +10, stress: -5 },
+        replies: [
+          { text: '……ここの飯はまずい。手料理が恋しいよ。', flags: ['homemade'] },
+        ] },
+      { id: 'homemade', text: '手料理……誰かに作ってもらっていたんですか？', requires: ['homemade'],
+        effect: { aff: +3, stress: +8 },
+        replies: [
+          { when: s => s.aff >= 40, cond: '好感度40以上', text: '……ああ。料理だけは上手いやつでな。\nいや、関係ないだろ。', flags: ['someone'] },
+          { text: '自炊だよ。', keep: true },
+        ] },
+      { id: 'motive', text: 'どうして、銀行強盗なんてしたんですか？',
+        effect: { aff: 0, stress: +8 },
+        replies: [
+          { text: '金が要った。それだけだ。', flags: ['money'] },
+        ] },
+      { id: 'money', text: 'そのお金は、何に使うつもりだったんですか？', requires: ['money'],
+        effect: { aff: 0, stress: +12 },
+        replies: [
+          { when: s => s.aff >= 45, cond: '好感度45以上', text: '……あいつの借金を、返してやりたかった。', flags: ['someone'] },
+          { text: 'あんたに言う必要はない。', keep: true },
+        ] },
+      { id: 'loot', text: '盗まれた物は、まだ見つかっていません。どこにあるんですか？',
+        effect: { aff: -3, stress: +12 },
+        replies: [
+          { when: s => s.stress >= 75, cond: 'ストレス75以上', text: '……庭なんか掘り返しても、何も出てこないぞ！\nあのダイヤは……っ、くそ。', flags: ['diamond', 'garden'], slip: true },
+          { when: s => s.stress >= 55, cond: 'ストレス55以上', text: '……あんなダイヤ、もうどうでもいい。', flags: ['diamond'], slip: true },
+          { text: '全部売っ払って、使い切ったよ。' },
+        ] },
+      { id: 'someone', text: 'その人は、あなたにとってどんな存在なんですか？', requires: ['someone'],
+        effect: { aff: +8, stress: +5 },
+        replies: [
+          { when: s => s.stress >= 60, cond: 'ストレス60以上', text: '大事な女だよ……っ、今のは忘れろ。', flags: ['woman'], slip: true },
+          { when: s => s.aff >= 50, cond: '好感度50以上', text: '……ガキの頃からの友達だ。\n彼女には、俺しかいないんだよ。', flags: ['woman', 'friend'] },
+          { text: 'ただの知り合いだ。', keep: true },
+        ] },
+      { id: 'camera', text: '防犯カメラの映像を、もう一度確認しているところです。',
+        effect: { aff: -5, stress: +15 },
+        replies: [
+          { when: s => s.stress >= 50, cond: 'ストレス50以上', text: 'っ……！ 外の映像もか？\n……いや、何でもない。', flags: ['outside'], slip: true },
+          { text: '……好きにしろ。映ってるのは俺だけだ。' },
+        ] },
+      { id: 'outside', text: '銀行の外に何か映っていると、困るんですか？', requires: ['outside'],
+        effect: { aff: -3, stress: +15 },
+        replies: [
+          { text: '……外で誰かが見張ってたなんて、俺は一言も言ってない。', flags: ['accomplice'], slip: true },
+        ] },
+      { id: 'empathy', text: 'あなたが誰かを守ろうとしているのは、分かっています。',
+        effect: { aff: +15, stress: -10 },
+        replies: [
+          { when: s => s.aff >= 45, cond: '好感度45以上', text: '……あんたに何が分かる。\nでも、ありがとな。', flags: ['trust'] },
+          { text: '……知ったような口をきくな。' },
+        ] },
+      { id: 'day', text: '事件の日、あなたは一人で銀行に向かったんですか？', requires: ['trust'],
+        effect: { aff: 0, stress: +5 },
+        replies: [
+          { when: s => s.aff >= 55, cond: '好感度55以上', text: '……車で送ってもらった。\n俺が出てくるまで、外で待ってたんだ。あいつは。', flags: ['accomplice'] },
+          { text: '……ああ。一人で行った。', keep: true },
+        ] },
+      { id: 'lookout', text: '見張り役がいたんですね。その人を庇っているんですか？', mentions: ['accomplice'],
+        effect: { aff: -3, stress: +15 },
+        replies: [
+          { when: s => s.aff >= 50, text: '……庇ってるわけじゃない。\nあいつは、俺に付き合わされただけだ。' },
+          { text: '見張りなんていない！ 何度言わせるんだ。' },
+        ] },
+      { id: 'threaten', text: '共犯者を庇えば、あなたの罪が重くなりますよ。', mentions: ['accomplice'],
+        effect: { aff: -15, stress: +25 },
+        replies: [
+          { text: '……それでいい。俺一人が背負えば済む話だ。' },
+        ] },
+      { id: 'where', text: '彼女は今、どこにいるんですか？', mentions: ['woman'],
+        effect: { aff: -2, stress: +12 },
+        replies: [
+          { when: s => s.stress >= 60, text: '知らない！ マ……あいつには手を出すな！', slip: true },
+          { text: '……知らない。捕まってから、一度も会ってない。' },
+        ] },
+      // ---- 自白可能領域に入ると出る「自白させる」選択肢 ----
+      { id: 'confess', text: '……もう、全部話してしまいませんか。（自白させる）',
+        requires: ['shaken'], zone: s => s.aff - s.stress >= s.rules.confessDiff, zoneLabel: '好感度−ストレスが30以上',
+        priority: true, notice: '田中の心が大きく揺れている。今なら自白させられそうだ。',
+        effect: { aff: 0, stress: 0 },
+        replies: [
+          { text: '……分かった。全部話す。\n外で見張りをしてたのは、茉奈だ。ガキの頃からの友達で、借金で首が回らなくなってた。\n俺が「一度だけだ」って持ちかけたんだ。あいつは車で待ってただけだ。',
+            flags: ['name', 'woman', 'accomplice', 'friend', 'confessed'], slip: true },
+        ] },
+      // ---- 自白状態で聞ける詳細（自白状態ではこれらと延長だけが出る） ----
+      { id: 'c_why', text: '茉奈さんは、どうして手伝ったんですか？', requires: ['confessed'],
+        effect: { aff: +3, stress: +3 },
+        replies: [
+          { text: '借金を返すあてが、もうなかったんだ。\nあいつは最後まで「やめよう」って言ってた。それを押し切ったのは俺だ。' },
+        ] },
+      { id: 'c_day', text: '事件の日のことを、最初から話してください。', requires: ['confessed'],
+        effect: { aff: 0, stress: +3 },
+        replies: [
+          { text: '茉奈の車で銀行に行って、俺だけ中に入った。\n貸金庫を開けさせたら、中身はダイヤだった。思ってたよりずっと多かった。', flags: ['diamond'] },
+        ] },
+      { id: 'c_loot', text: '盗んだ物は、今どこにあるんですか？', requires: ['confessed'],
+        effect: { aff: 0, stress: +5 },
+        replies: [
+          { text: '……ダイヤは、茉奈の家の庭に埋めてある。\nほとぼりが冷めたら、あいつの借金に充てるつもりだった。', flags: ['diamond', 'garden'] },
+        ] },
+      { id: 'c_diamond', text: 'ダイヤは、売るつもりだったんですか？', requires: ['confessed'], mentions: ['diamond'],
+        effect: { aff: 0, stress: +3 },
+        replies: [
+          { text: 'ほとぼりが冷めたら、少しずつな。\n茉奈の借金を返して、残りは……あいつにやるつもりだった。' },
+        ] },
+      { id: 'c_garden', text: '庭に埋めたのは、茉奈さんの考えですか？', requires: ['confessed'], mentions: ['garden'],
+        effect: { aff: 0, stress: +5 },
+        replies: [
+          { text: '違う、俺が勝手に埋めた。\nあいつは……たぶん、気づいてもいない。' },
+        ] },
+      { id: 'c_message', text: '茉奈さんに、伝えたいことはありますか？', requires: ['confessed'],
+        effect: { aff: +5, stress: -5 },
+        replies: [
+          { text: '……巻き込んで悪かった、って。\nそれだけ伝えてくれれば、いい。' },
+        ] },
+      { id: 'extend', text: '（取り調べの時間を延長する　＋3ターン）', requires: ['confessed'], repeatable: true, priority: true,
+        extendTurns: 3, effect: { aff: 0, stress: 0 },
+        replies: [
+          { text: s => ['……好きにしろ。もう逃げも隠れもしない。', '……まだ聞くのか。いいよ、付き合ってやる。'][s.turn % 2] },
+        ] },
+      // 何度でも選べるつなぎの選択肢
+      { id: 'coffee', text: '（缶コーヒーを差し出す）', repeatable: true,
+        effect: { aff: +6, stress: -8 },
+        replies: [
+          { text: s => ['……悪いな。', '……甘いのしかないのかよ。', '……ああ、もらう。'][s.turn % 3] },
+        ] },
+      { id: 'stare', text: '（黙って、相手の目を見つめる）', repeatable: true,
+        effect: { aff: -2, stress: +10 },
+        replies: [
+          { when: s => s.stress >= 60, text: '……なんだよ。そんな目で見るな。' },
+          { text: '……何か言えよ、刑事さん。' },
+        ] },
+    ],
+  },
+  // 今後キャラクターを追加する場合はここに定義（locked: true で選択不可表示）
+  { id: 'locked1', name: '？？？', tag: '準備中', locked: true },
+  { id: 'locked2', name: '？？？', tag: '準備中', locked: true },
+];
+
+/* =========================================================
+   テキスト判定ユーティリティ
+   ========================================================= */
+function normalize(str) {
+  return (str || '')
+    .normalize('NFKC')
+    .toLowerCase()
+    .replace(/[ァ-ヶ]/g, ch => String.fromCharCode(ch.charCodeAt(0) - 0x60)) // カタカナ→ひらがな
+    .replace(/[\s、。，．,.!！?？「」『』（）()・…ー〜~\-]/g, '');
+}
+// 指定がない限り1単語（いずれかの表記）が含まれているかで判定
+function containsWord(text, variants) {
+  const t = normalize(text);
+  return variants.some(v => t.includes(normalize(v)));
+}
+
+/* =========================================================
+   セーブデータ（実績・質問一覧）… ブラウザの localStorage に保存
+   ========================================================= */
+const Save = {
+  KEY: 'himitsu-wo-abake-save-v1',
+  data: { chars: {} },
+  load() {
+    try { this.data = JSON.parse(localStorage.getItem(this.KEY)) || { chars: {} }; } catch (e) { this.data = { chars: {} }; }
+  },
+  write() {
+    try { localStorage.setItem(this.KEY, JSON.stringify(this.data)); } catch (e) { /* 保存できない環境では無視 */ }
+  },
+  of(charId) {
+    const d = this.data.chars[charId] ||= {};
+    ['facts', 'endings', 'seen', 'asked', 'flags'].forEach(k => { d[k] ||= []; });
+    return d;
+  },
+  add(charId, key, value) {
+    const list = this.of(charId)[key];
+    if (!list.includes(value)) { list.push(value); this.write(); }
+  },
+  reset() { this.data = { chars: {} }; this.write(); },
+};
+Save.load();
+
+/* =========================================================
+   ミュージック … ブラウザの自動再生制限があるため、最初のクリックで再生を始める
+   ========================================================= */
+const Music = {
+  KEY: 'himitsu-wo-abake-volume',
+  el: Object.assign(new Audio('audio/fuon.mp3'), { loop: true }),
+  init() {
+    let v = 0.5;
+    try { const saved = localStorage.getItem(this.KEY); if (saved !== null) v = Number(saved); } catch (e) { /* 既定値のまま */ }
+    this.setVolume(v, false);
+    document.addEventListener('click', () => this.el.play().catch(() => {}), { once: true });
+  },
+  setVolume(v, save = true) {
+    this.el.volume = Math.max(0, Math.min(1, v));
+    document.getElementById('volume').value = Math.round(this.el.volume * 100);
+    document.getElementById('volumeText').textContent = Math.round(this.el.volume * 100);
+    if (save) try { localStorage.setItem(this.KEY, String(this.el.volume)); } catch (e) { /* 保存できない環境では無視 */ }
+  },
+};
+Music.init();
+
+/* =========================================================
+   ゲーム本体
+   ========================================================= */
+const Game = {
+  char: null,
+  state: null,
+
+  show(id) {
+    document.querySelectorAll('.screen').forEach(s => s.classList.toggle('active', s.id === id));
+  },
+
+  portrait(c, expr) {
+    if (!c.image) return '';
+    const src = typeof c.image === 'string' ? c.image : (c.image[expr] || c.image.normal);
+    return `<img src="${src}" alt="${c.name}" class="expr-${expr}">`;
+  },
+
+  toSelect() {
+    const wrap = document.getElementById('cards');
+    wrap.innerHTML = '';
+    CHARACTERS.forEach(c => {
+      const b = document.createElement('button');
+      b.className = 'card' + (c.locked ? ' locked' : '');
+      b.innerHTML = `
+        <div class="portrait">${c.locked ? '？' : this.portrait(c, 'normal')}</div>
+        <div class="info"><div class="name">${c.fullName || c.name}</div><div class="tag">${c.tag.replace(/\n/g, '<br>')}</div></div>`;
+      if (!c.locked) b.onclick = () => this.start(c.id);
+      wrap.appendChild(b);
+    });
+    this.show('select');
+  },
+
+  start(id) {
+    const c = CHARACTERS.find(x => x.id === id);
+    this.char = c;
+    this.state = {
+      turn: 0,
+      maxTurns: MAX_TURNS, // 自白状態の「延長」で増える
+      aff: c.initial.aff,
+      stress: c.initial.stress,
+      flags: new Set(),
+      used: new Set(),
+      recent: [],          // フラグで新しく選べるようになった質問（優先表示）
+      shown: {},           // 各話題を提示した回数
+      ended: false,
+      endReason: null,
+      rules: c.rules,
+    };
+    document.getElementById('talkName').textContent = c.fullName || c.name;
+    document.getElementById('turnMax').textContent = MAX_TURNS;
+    document.getElementById('log').innerHTML = '';
+    document.getElementById('answerText').value = '';
+    this.show('talk');
+    this.addMsg('sys', `${c.name}の秘密を暴け。（最大${MAX_TURNS}ターン）`);
+    this.addMsg('npc', c.intro);
+    this.refresh();
+    this.renderChoices();
+  },
+
+  expression() {
+    const s = this.state;
+    if (s.flags.has('confessed')) return 'sad';
+    if (s.stress >= 70) return 'tense';
+    if (s.stress >= 45) return 'uneasy';
+    if (s.aff >= 60) return 'smile';
+    if (s.aff < 20) return 'cold';
+    return 'normal';
+  },
+
+  refresh() {
+    const s = this.state;
+    document.getElementById('turnNow').textContent = Math.min(s.turn + 1, s.maxTurns);
+    document.getElementById('turnMax').textContent = s.maxTurns;
+    document.getElementById('affFill').style.width = s.aff + '%';
+    document.getElementById('stressFill').style.width = s.stress + '%';
+    document.getElementById('stressGauge').classList.toggle('hot', s.stress >= 70);
+    const expr = this.expression();
+    document.getElementById('charView').innerHTML = this.portrait(this.char, expr);
+    document.getElementById('mood').textContent = {
+      normal: '様子：平静', smile: '様子：打ち解けている', cold: '様子：警戒している',
+      uneasy: '様子：落ち着かない', tense: '様子：動揺している', sad: '様子：観念した',
+    }[expr];
+  },
+
+  addMsg(type, text, extraClass = '') {
+    const log = document.getElementById('log');
+    const d = document.createElement('div');
+    d.className = `msg ${type} ${extraClass}`;
+    if (type !== 'sys') {
+      const sp = document.createElement('div');
+      sp.className = 'speaker';
+      sp.textContent = type === 'me' ? 'あなた' : this.char.name;
+      d.appendChild(sp);
+    }
+    const body = document.createElement('div');
+    d.appendChild(body);
+    log.appendChild(d);
+    if (type === 'npc') {
+      // タイプライター表示
+      let i = 0;
+      return new Promise(res => {
+        const tick = () => {
+          body.textContent = text.slice(0, ++i);
+          log.scrollTop = log.scrollHeight;
+          if (i < text.length) setTimeout(tick, 28); else res();
+        };
+        tick();
+      });
+    }
+    body.textContent = text;
+    log.scrollTop = log.scrollHeight;
+    return Promise.resolve();
+  },
+
+  // 決められた返答で立つフラグ（requires）・キャラが口にした事実（mentions）・数値の領域（zone）を満たしているか
+  flagsMet(t) {
+    const has = f => this.state.flags.has(f);
+    return (t.requires || []).every(has) && (t.mentions || []).every(has) && (!t.zone || t.zone(this.state));
+  },
+
+  availableTopics() {
+    const s = this.state;
+    let topics = this.char.topics.filter(t => (t.repeatable || !s.used.has(t.id)) && this.flagsMet(t));
+    // 自白状態では、自白後の質問（confessed が条件のもの）だけを出す
+    if (s.flags.has('confessed')) topics = topics.filter(t => (t.requires || []).includes('confessed'));
+    // 新しく解放された話題を優先し、提示済みで選ばれなかった話題は後回しにしてローテーションさせる
+    const score = t => (s.recent.includes(t.id) ? -2 : 0) + (s.shown[t.id] || 0);
+    const priority = topics.filter(t => t.priority);   // 「自白させる」「延長」は常に表示
+    const fresh = topics.filter(t => !t.priority && !t.repeatable).sort((a, b) => score(a) - score(b));
+    const repeat = topics.filter(t => !t.priority && t.repeatable);
+    // 優先 ＋ 新しい話題を最大3つ ＋ つなぎの選択肢（缶コーヒー・沈黙は常に選べる）
+    return [...priority, ...fresh.slice(0, 3), ...repeat];
+  },
+
+  renderChoices() {
+    const box = document.getElementById('choices');
+    box.innerHTML = '';
+    if (this.state.ended) return;
+    this.availableTopics().forEach(t => {
+      this.state.shown[t.id] = (this.state.shown[t.id] || 0) + 1;
+      Save.add(this.char.id, 'seen', t.id);
+      const b = document.createElement('button');
+      b.className = 'choice';
+      b.textContent = t.text;
+      b.onclick = () => this.choose(t);
+      box.appendChild(b);
+    });
+  },
+
+  async choose(t) {
+    const s = this.state;
+    document.querySelectorAll('.choice').forEach(b => b.disabled = true);
+    s.used.add(t.id);
+    s.recent = s.recent.filter(id => id !== t.id);
+    Save.add(this.char.id, 'asked', t.id);
+    await this.addMsg('me', t.text);
+    // 数値の変化も含めて「新しく選べるようになった質問」を判定するため、変化前の状態を控える
+    const before = this.char.topics.filter(x => this.flagsMet(x));
+
+    // パラメータ増減
+    const clamp = v => Math.max(0, Math.min(100, v));
+    s.aff = clamp(s.aff + (t.effect?.aff || 0));
+    s.stress = clamp(s.stress + (t.effect?.stress || 0));
+
+    // 返答
+    const branch = t.replies.find(b => !b.when || b.when(s));
+    const r = { ...branch, text: typeof branch.text === 'function' ? branch.text(s) : branch.text };
+    // フラグを立て、それによって新しく選べるようになった質問を優先表示に回す
+    const confessedBefore = s.flags.has('confessed');
+    const raise = f => { s.flags.add(f); Save.add(this.char.id, 'flags', f); };
+    (r.flags || []).forEach(raise);
+    // 好感度・ストレスの値で自動的に立つフラグ（一度立てば下がっても残る）
+    (this.char.autoFlags || []).forEach(a => { if (a.when(s)) raise(a.flag); });
+    if (r.keep) s.used.delete(t.id);   // 失敗した問いかけは、後で再挑戦できる
+    const opened = this.char.topics.filter(x => this.flagsMet(x) && !before.includes(x));
+    opened.forEach(x => s.recent.push(x.id));
+    if (t.extendTurns) s.maxTurns += t.extendTurns;
+    s.turn++;
+    this.refresh();
+    await new Promise(res => setTimeout(res, 300));
+    await this.addMsg('npc', r.text, r.slip ? 'slip' : '');
+
+    // 終了判定
+    if (s.stress >= s.rules.walkOutStress) {
+      await this.addMsg('npc', 'もういい。これ以上、話すことはない。');
+      return this.endTalk('walkout');
+    }
+    // 自白状態へ移行。取り調べは続き、詳細を聞き出せる
+    if (!confessedBefore && s.flags.has('confessed')) {
+      await this.addMsg('sys', `${this.char.name}は自白状態になった。質問すれば、隠していたことを話してくれる。`);
+    }
+    // 自白可能領域に入ったなどの通知
+    for (const x of opened) if (x.notice && !s.flags.has('confessed')) await this.addMsg('sys', x.notice);
+    if (s.turn >= s.maxTurns) {
+      this.addMsg('sys', '取り調べの時間が終わった。');
+      return this.endTalk('timeup');
+    }
+    this.renderChoices();
+  },
+
+  askEnd() { if (!this.state.ended) document.getElementById('endModal').classList.add('active'); },
+  closeModal() { document.getElementById('endModal').classList.remove('active'); },
+
+  endTalk(reason) {
+    const s = this.state;
+    if (s.ended) return;
+    s.ended = true;
+    s.endReason = reason;
+    document.getElementById('choices').innerHTML = '';
+    const b = document.createElement('button');
+    b.className = 'btn primary';
+    b.textContent = '秘密を書き記す →';
+    b.onclick = () => this.toAnswer();
+    document.getElementById('choices').appendChild(b);
+    if (reason === 'manual') this.toAnswer();
+  },
+
+  toAnswer() {
+    document.getElementById('answerQ').textContent =
+      this.char.secret.question || `${this.char.name}の秘密は何？`;
+    this.show('answer');
+    setTimeout(() => document.getElementById('answerText').focus(), 50);
+  },
+
+  submit() {
+    const text = document.getElementById('answerText').value;
+    const sec = this.char.secret;
+    const clear = containsWord(text, sec.unique.variants);
+    const hits = sec.extras.map(e => containsWord(text, e.variants));
+    const n = hits.filter(Boolean).length;
+
+    const v = document.getElementById('verdictText');
+    v.textContent = clear ? 'CLEAR' : 'FAILED';
+    v.className = 'big ' + (clear ? 'clear' : 'fail');
+    document.getElementById('fracNum').textContent = n;
+    document.getElementById('fracDen').textContent = sec.extras.length;
+
+    const facts = document.getElementById('facts');
+    facts.innerHTML = '';
+    const addFact = (label, hit, unique) => {
+      const f = document.createElement('span');
+      f.className = 'fact' + (hit ? ' hit' : '') + (unique ? ' unique' : '');
+      f.textContent = hit ? (unique ? '★ ' : '✓ ') + label : '？？？';
+      facts.appendChild(f);
+    };
+    addFact(sec.unique.label, clear, true);
+    sec.extras.forEach((e, i) => addFact(e.label, hits[i], false));
+
+    const [endId, body] = this.ending(clear, n, sec.extras.length);
+    const title = this.char.endings[endId];
+
+    // 実績に登録
+    if (clear) Save.add(this.char.id, 'facts', 'unique');
+    sec.extras.forEach((e, i) => { if (hits[i]) Save.add(this.char.id, 'facts', e.label); });
+    Save.add(this.char.id, 'endings', endId);
+
+    document.getElementById('endingTitle').textContent = title;
+    document.getElementById('endingText').textContent = body;
+    document.getElementById('yours').textContent = text.trim() ? `あなたの回答：「${text.trim()}」` : 'あなたの回答：（未記入）';
+    this.show('result');
+  },
+
+  ending(clear, n, total) {
+    const how = this.state.flags.has('confessed')
+      ? '取調室で、田中はついに共犯者の名を口にした。'
+      : {
+        walkout: '田中は激昂し、それ以上の取り調べを拒んだ。',
+        timeup: '取り調べの時間が尽きるまで、田中は「一人でやった」と言い張った。',
+        manual: 'あなたは自ら取り調べを切り上げた。',
+      }[this.state.endReason] || '';
+    if (clear && n === total)
+      return ['e1', `${how}\n銀行の外で見張りをしていたのは、田中の幼なじみ「茉奈」だった。\n盗まれたダイヤは、茉奈の家の庭に埋められていた。\nあなたの調書は、田中が隠し通そうとした全てを捉えていた。`];
+    if (clear)
+      return ['e2', `${how}\n田中が庇っていた共犯者の名は「茉奈」だった。\nしかし、事件の全容にはまだ空白が残っている。`];
+    if (n > 0)
+      return ['e3', `${how}\n共犯者の輪郭は掴んだものの、田中が守り抜いた名前には辿り着けなかった。`];
+    return ['e4', `${how}\n共犯者の存在は、闇の中へ消えていった。`];
+  },
+
+  /* ---------- 設定（実績・質問一覧） ---------- */
+  openSettings(tab = 'achieve') {
+    this.settingsTab = tab;
+    document.querySelectorAll('.tab').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
+    const body = document.getElementById('settingsBody');
+    body.innerHTML = '';
+    CHARACTERS.filter(c => !c.locked).forEach(c => {
+      const sv = Save.of(c.id);
+      const sec = document.createElement('div');
+      sec.className = 'set-char';
+      let html = `<div class="set-head"><div class="thumb">${this.portrait(c, 'normal')}</div><div><div class="name">${c.fullName || c.name}</div>`;
+
+      if (tab === 'achieve') {
+        // 暴いた秘密：見つけたものだけ明るく点灯
+        const items = [
+          { key: 'unique', label: c.secret.unique.label, unique: true },
+          ...c.secret.extras.map(e => ({ key: e.label, label: e.label })),
+        ];
+        const got = items.filter(it => sv.facts.includes(it.key)).length;
+        const ends = Object.entries(c.endings);
+        const gotEnd = ends.filter(([id]) => sv.endings.includes(id)).length;
+        html += `<div class="progress">秘密 ${got} / ${items.length}　・　エンディング ${gotEnd} / ${ends.length}</div></div></div>`;
+        html += '<div class="set-label">暴いた秘密</div><div class="badges">' + items.map(it => {
+          const on = sv.facts.includes(it.key);
+          return `<span class="badge ${on ? 'on' : ''} ${it.unique ? 'unique' : ''}">${on ? (it.unique ? '★ ' : '') + it.label : '？？？'}</span>`;
+        }).join('') + '</div>';
+        html += '<div class="set-label">エンディング</div><div class="badges">' + ends.map(([id, name]) => {
+          const on = sv.endings.includes(id);
+          return `<span class="badge ${on ? 'on' : ''}">${on ? name : '？？？'}</span>`;
+        }).join('') + '</div>';
+      } else if (tab === 'flags') {
+        html += this.flagChart(c, sv);
+      } else {
+        // 質問一覧：一度でも選択肢に出たものだけ表示
+        const seen = c.topics.filter(t => sv.seen.includes(t.id)).length;
+        html += `<div class="progress">発見した質問 ${seen} / ${c.topics.length}</div></div></div><ol class="qlist">`;
+        html += c.topics.map(t => {
+          if (!sv.seen.includes(t.id)) return '<li class="unknown">？？？（未発見）</li>';
+          const asked = sv.asked.includes(t.id);
+          return `<li class="${asked ? 'asked' : ''}"><span>${t.text}</span>${asked ? '<em>質問済み</em>' : ''}</li>`;
+        }).join('') + '</ol>';
+      }
+      sec.innerHTML = html;
+      body.appendChild(sec);
+    });
+    this.show('settings');
+  },
+
+  /* フラグ管理チャート：「立つきっかけ（質問＋条件）→ フラグ → 解放される質問」を1行ずつ並べる。
+     未取得のフラグは「すべて表示」をオンにするまで伏せる。 */
+  flagChart(c, sv) {
+    const showAll = this.flagShowAll;
+    const got = Object.keys(c.flagDefs).filter(f => sv.flags.includes(f)).length;
+    const q = t => `「${t.text}」`;
+    let html = `<div class="progress">取得したフラグ ${got} / ${Object.keys(c.flagDefs).length}</div></div></div>`;
+    html += `<div class="flag-tools">
+        <span>初期値：好感度 ${c.initial.aff} / ストレス ${c.initial.stress}　・　自白条件：好感度＋ストレスが一度 ${c.rules.shakenSum} 以上 → 好感度 − ストレス ≧ ${c.rules.confessDiff}　・　退席：ストレス ${c.rules.walkOutStress}</span>
+        <label><input type="checkbox" ${showAll ? 'checked' : ''} onchange="Game.flagShowAll=this.checked; Game.openSettings('flags')"> 未取得も表示（ネタバレ）</label>
+      </div>`;
+    html += '<div class="flow"><div class="flow-h">立つきっかけ（質問 ／ 条件）</div><div></div><div class="flow-h">フラグ</div><div></div><div class="flow-h">選べるようになる質問</div>';
+    Object.entries(c.flagDefs).forEach(([id, def]) => {
+      const on = sv.flags.includes(id);
+      const visible = on || showAll;
+      const sources = (c.autoFlags || []).filter(a => a.flag === id)
+        .map(a => `<li>（自動）<small>${a.cond}</small></li>`);
+      c.topics.forEach(t => t.replies.forEach(b => {
+        if ((b.flags || []).includes(id)) sources.push(`<li>${q(t)}<small>${b.cond || '必ず'}</small></li>`);
+      }));
+      const dests = c.topics.filter(t => [...(t.requires || []), ...(t.mentions || [])].includes(id))
+        .map(t => {
+          const others = [...(t.requires || []), ...(t.mentions || [])].filter(f => f !== id).map(f => c.flagDefs[f]?.label || f);
+          if (t.zoneLabel) others.push(t.zoneLabel);
+          return `<li>${q(t)}${others.length ? `<small>＋ ${others.join('・')}</small>` : ''}</li>`;
+        });
+      html += `
+        <ul class="flow-cell">${visible ? sources.join('') : '<li class="unknown">？？？</li>'}</ul>
+        <div class="flow-arrow">→</div>
+        <div class="flow-flag ${on ? 'on' : ''} type-${def.type}"><b>${visible ? def.label : '？？？'}</b><small>${def.type}${visible ? ` ・ ${id}` : ''}</small></div>
+        <div class="flow-arrow">→</div>
+        <ul class="flow-cell">${visible ? (dests.join('') || '<li class="none">—</li>') : '<li class="unknown">？？？</li>'}</ul>`;
+    });
+    return html + '</div>';
+  },
+
+  resetSave() {
+    if (!confirm('実績と質問一覧の記録をすべて消去しますか？')) return;
+    Save.reset();
+    this.openSettings(this.settingsTab);
+  },
+};
+
+// Ctrl+Enter で回答提出
+document.getElementById('answerText').addEventListener('keydown', e => {
+  if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) Game.submit();
+});
+</script>
+</body>
+</html>
